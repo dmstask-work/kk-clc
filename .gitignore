@@ -1,0 +1,21 @@
+# Python environment
+.venv/
+__pycache__/
+*.pyc
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Excel temp files
+~$*.xlsx
+~$*.xls
+
+# Generated output
+lifecycle_summary.png
+
+# Old/duplicate DO files
+DO/COPY_*
+DO/*.xls
+DO/Rekap_Invoice_Konsultasi_Cleaned(1).xlsx
+source/data_ms_keke_updated.xlsx
