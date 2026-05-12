@@ -64,12 +64,9 @@ def compute(cutoff_date: datetime) -> dict:
     do_df['_pay_month_num']  = do_df['Tanggal Payment'].dt.month.fillna(0).astype(int)
     do_df['_pay_year']       = do_df['Tanggal Payment'].dt.year.fillna(0).astype(int)
 
-    # Slices — MTD = 1st of selected month up to exact cutoff date
-    month_start = datetime(selected_year, sel_month_num, 1)
-    do_mtd_df = do_df[
-        (do_df['Tanggal Payment'] >= month_start) &
-        (do_df['Tanggal Payment'] <= cutoff_date)
-    ]
+    # Slices
+    # do_mtd_df = accumulation from first month of data up to cutoff (all-time up to cutoff)
+    do_mtd_df = do_df[do_df['Tanggal Payment'] <= cutoff_date]
     do_sel_df = do_df[
         (do_df['_pay_year'] == selected_year) &
         (do_df['_pay_month_num'] == sel_month_num) &
@@ -146,23 +143,25 @@ def compute(cutoff_date: datetime) -> dict:
                do_sel_df.apply(is_new_this_month, axis=1))
     A_count = do_sel_df[mask_a].drop_duplicates(subset=['No WhatsApp']).shape[0]
 
-    # C — clients with >1 transaction in DO MTD (repeat)
-    wa_freq     = do_mtd_df['No WhatsApp'].value_counts()
-    nama_freq   = do_mtd_df['_nama_norm'].value_counts()
-    repeat_wa   = set(wa_freq[wa_freq > 1].index)   - INVALID
-    repeat_nama = set(nama_freq[nama_freq > 1].index) - INVALID
-    C_count = do_mtd_df[
-        do_mtd_df['No WhatsApp'].isin(repeat_wa) |
-        do_mtd_df['_nama_norm'].isin(repeat_nama)
-    ]['No WhatsApp'].nunique()
+    # C — unique clients this month with Source = 'Lanjutan'
+    C_count = do_sel_df[do_sel_df['_source_norm'] == 'lanjutan']['No WhatsApp'].nunique()
 
-    # D — referral rows in DO MTD
-    D_count = int((do_mtd_df['_source_norm'] == 'referral').sum())
+    # D — unique clients this month with Source = 'Referral'
+    D_count = do_sel_df[do_sel_df['_source_norm'] == 'referral']['No WhatsApp'].nunique()
 
+    def pct(num, denom):
+        if not denom:
+            return 0.0
+        return round(num / denom * 100, 1)
+    
     return {
         'BOX1': BOX1, 'BOX2': BOX2, 'BOX3': BOX3,
-        'A': A_count, 'B': B_count, 'C': C_count, 'D': D_count,
+        'A': A_count, 'A_pct': pct(A_count, BOX1),
+        'B': B_count, 'B_pct': pct(B_count, BOX2),
+        'C': C_count, 'C_pct': pct(C_count, BOX3),
+        'D': D_count, 'D_pct': pct(D_count, BOX3),
     }
+
 
 
 # ─── Dash App ─────────────────────────────────────────────────────────────────
@@ -178,9 +177,9 @@ DARK   = '#1e293b'
 today = datetime.today()
 
 # ─── Style helpers ─────────────────────────────────────────────────────────────
-def card_box(label, value, bg, tc):
+def card_box(label, value, pct, bg, tc):
     return html.Div([
-        html.Div(label, style={
+        html.Div(f'{label} = {pct}%', style={
             'backgroundColor': bg, 'color': tc, 'fontWeight': '700',
             'fontSize': '13px', 'padding': '10px 12px',
             'borderRadius': '10px 10px 0 0', 'textAlign': 'center',
@@ -295,15 +294,15 @@ def update(date_str):
 
     table = html.Div([header, data_row])
 
-    # Cards
+    # Cards — label, count, pct, bg, tc
     card_defs = [
-        ('A  →  Closing Rate',        r['A'], '#ADD3FA', '#1e3a5f'),
-        ('B  →  Closing dari Kotak 2', r['B'], '#B9EBFA', '#0c5f70'),
-        ('C  →  Lanjutan',             r['C'], '#FAEFC3', '#7a5c0a'),
-        ('D  →  Referral',             r['D'], '#FAD4C8', '#7a2c18'),
+        ('A  →  Closing Rate',         r['A'], r['A_pct'], '#ADD3FA', '#1e3a5f'),
+        ('B  →  Closing Rate',  r['B'], r['B_pct'], '#B9EBFA', '#0c5f70'),
+        ('C  →  Lanjutan',              r['C'], r['C_pct'], '#FAEFC3', '#7a5c0a'),
+        ('D  →  Referral',              r['D'], r['D_pct'], '#FAD4C8', '#7a2c18'),
     ]
     cards = html.Div(
-        [card_box(lbl, val, bg, tc) for lbl, val, bg, tc in card_defs],
+        [card_box(lbl, val, pct, bg, tc) for lbl, val, pct, bg, tc in card_defs],
         style={'display': 'flex'},
     )
 
@@ -314,3 +313,6 @@ def update(date_str):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8050))
     app.run(debug=False, host='0.0.0.0', port=port)
+
+
+# DO/Rekap_Invoice_Konsultasi_Cleaned.xlsx main.py
